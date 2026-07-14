@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
+    "validate": "tsx prisma/validate.ts",
     "pregenerate": "tsx prisma/pregenerate.ts",
     "clear:explanations": "tsx prisma/clearExplanations.ts",
     "db:push": "prisma db push",

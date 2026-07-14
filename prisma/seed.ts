@@ -9,7 +9,7 @@ loadEnv({ path: ".env" });
 
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { questions } from "./questions";
+import { bank as questions } from "./bank";
 
 // Seed over a direct Postgres connection using the pg driver adapter.
 const connectionString =
