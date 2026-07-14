@@ -7,11 +7,19 @@
 import type { SeedQuestion } from "./data/shared";
 import { questions as coreQuestions } from "./questions";
 import { docsQuestions } from "./data/docs";
+import { pdpaQuestions } from "./data/pdpa";
+import { processQuestions } from "./data/process";
+import { generalQuestions } from "./data/general";
+import { strategyQuestions } from "./data/strategy";
 
 // Order matters only for the display `number`; sampling randomizes anyway.
 const sources: SeedQuestion[][] = [
   coreQuestions as unknown as SeedQuestion[],
   docsQuestions,
+  pdpaQuestions,
+  processQuestions,
+  generalQuestions,
+  strategyQuestions,
 ];
 
 // Flatten and assign sequential numbers (1..N) across the whole bank.
