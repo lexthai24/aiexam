@@ -33,13 +33,27 @@ export function Quiz() {
   const [submitting, setSubmitting] = useState(false);
   const [finished, setFinished] = useState(false);
   const [sessionId, setSessionId] = useState("");
+  // `round` seeds the randomization. It stays fixed while doing a quiz (so
+  // reloading keeps the same questions/order) and increments on restart to draw
+  // a fresh, differently-ordered set of 100 questions.
+  const [round, setRound] = useState(0);
 
   useEffect(() => {
     setSessionId(getSessionId());
-    fetchJson<{ questions: QuestionDTO[] }>("/api/questions")
+  }, []);
+
+  // (Re)load a randomized round of questions whenever the round changes.
+  useEffect(() => {
+    if (!sessionId) return;
+    setQuestions(null);
+    setLoadError(null);
+    const seed = `${sessionId}:${round}`;
+    fetchJson<{ questions: QuestionDTO[] }>(
+      `/api/questions?seed=${encodeURIComponent(seed)}`
+    )
       .then((json) => setQuestions(json.questions))
       .catch((err) => setLoadError(err.message));
-  }, []);
+  }, [sessionId, round]);
 
   const answeredCount = useMemo(
     () => Object.values(states).filter((s) => s.result).length,
@@ -91,6 +105,8 @@ export function Quiz() {
           setStates({});
           setCurrent(0);
           setFinished(false);
+          // New round → new seed → a fresh, differently-ordered set of 100.
+          setRound((r) => r + 1);
         }}
       />
     );
@@ -132,7 +148,7 @@ export function Quiz() {
       <div className="mb-6">
         <div className="mb-2 flex items-center justify-between text-sm text-[var(--muted)]">
           <span>
-            ข้อ {q.number} จาก {questions.length}
+            ข้อ {current + 1} จาก {questions.length}
           </span>
           <span>
             ตอบแล้ว {answeredCount} · ถูก{" "}
@@ -328,9 +344,9 @@ function ResultsView({
               key={q.id}
               onClick={() => onReview(idx)}
               className={`${base} ${cls}`}
-              title={`ข้อ ${q.number}`}
+              title={`ข้อ ${idx + 1}`}
             >
-              {q.number}
+              {idx + 1}
             </button>
           );
         })}
