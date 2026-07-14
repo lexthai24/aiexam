@@ -3,17 +3,32 @@ import { withAccelerate } from "@prisma/extension-accelerate";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 // Build a Prisma client that works with EITHER connection-string format, so the
-// app runs the same locally and on any host regardless of how DATABASE_URL is
+// app runs the same locally and on any host regardless of how the database is
 // provisioned:
 //
 //   • prisma+postgres://accelerate.prisma-data.net/...  → Prisma Accelerate
 //   • postgres:// or postgresql://...                    → direct Postgres (pg)
 //
-// This avoids a common production failure where the host sets DATABASE_URL to a
-// direct connection string but the code assumed an Accelerate URL (or vice
-// versa), causing every query to throw and API routes to return empty 500s.
+// Prisma-managed hosting sets DATABASE_URL to a direct postgres:// URL and also
+// provides DATABASE_URL_POOLED (a pgbouncer-pooled connection). In serverless
+// runtimes we prefer the pooled URL to avoid exhausting connections. This avoids
+// the production failure where the host's URL format differed from the
+// Accelerate URL the code assumed, causing every query to throw (empty 500s).
+function pickUrl(): string {
+  const accelerate = process.env.DATABASE_URL ?? "";
+  // If DATABASE_URL is an Accelerate URL, use it directly.
+  if (
+    accelerate.startsWith("prisma+postgres://") ||
+    accelerate.startsWith("prisma://")
+  ) {
+    return accelerate;
+  }
+  // Otherwise it's a direct connection — prefer the pooled variant if present.
+  return process.env.DATABASE_URL_POOLED || accelerate;
+}
+
 function makeClient() {
-  const url = process.env.DATABASE_URL ?? "";
+  const url = pickUrl();
 
   // Both branches apply withAccelerate() so they return the SAME extended-client
   // type (the extension is harmless on a direct connection — it just adds
