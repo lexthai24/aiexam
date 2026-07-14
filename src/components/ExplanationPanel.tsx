@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ExplanationResult } from "@/lib/types";
+import { fetchJson } from "@/lib/fetchJson";
 
 // Fetches (and caches on the server) the AI explanation for a question, then
 // renders it. Shows a friendly loading state while Deepseek is thinking.
@@ -17,12 +18,7 @@ export function ExplanationPanel({ questionId }: { questionId: number }) {
     setError(null);
     setData(null);
 
-    fetch(`/api/explanation/${questionId}`)
-      .then(async (res) => {
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "เกิดข้อผิดพลาด");
-        return json as ExplanationResult;
-      })
+    fetchJson<ExplanationResult>(`/api/explanation/${questionId}`)
       .then((json) => {
         if (!cancelled) setData(json);
       })

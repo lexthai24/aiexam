@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { AnswerResult, QuestionDTO } from "@/lib/types";
+import { fetchJson } from "@/lib/fetchJson";
 import { ExplanationPanel } from "./ExplanationPanel";
 
 // Per-question state kept in memory for the whole session so learners can
@@ -35,13 +36,8 @@ export function Quiz() {
 
   useEffect(() => {
     setSessionId(getSessionId());
-    fetch("/api/questions")
-      .then(async (res) => {
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "โหลดข้อสอบไม่สำเร็จ");
-        return json.questions as QuestionDTO[];
-      })
-      .then(setQuestions)
+    fetchJson<{ questions: QuestionDTO[] }>("/api/questions")
+      .then((json) => setQuestions(json.questions))
       .catch((err) => setLoadError(err.message));
   }, []);
 
@@ -108,7 +104,7 @@ export function Quiz() {
     if (answered || submitting) return;
     setSubmitting(true);
     try {
-      const res = await fetch("/api/answer", {
+      const result = await fetchJson<AnswerResult>("/api/answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -117,8 +113,6 @@ export function Quiz() {
           sessionId,
         }),
       });
-      const result = (await res.json()) as AnswerResult;
-      if (!res.ok) throw new Error("ส่งคำตอบไม่สำเร็จ");
       setStates((prev) => ({
         ...prev,
         [q.id]: { chosenLabel: label, result },

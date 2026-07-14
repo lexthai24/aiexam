@@ -6,24 +6,35 @@ import { prisma } from "@/lib/prisma";
 // The `isCorrect` flag is intentionally omitted so the answer key is never
 // shipped to the client — correctness is checked server-side in /api/answer.
 export async function GET() {
-  const rows = await prisma.question.findMany({
-    include: { choices: true },
-  });
+  try {
+    const rows = await prisma.question.findMany({
+      include: { choices: true },
+    });
 
-  // Shape the response and strip `isCorrect` so the answer key never reaches the
-  // client. Questions and choices are sorted in JS (an `orderBy` combined with
-  // `include` currently breaks type inference on the extended Prisma client).
-  const questions = [...rows]
-    .sort((a, b) => a.number - b.number)
-    .map((q) => ({
-      id: q.id,
-      number: q.number,
-      category: q.category,
-      text: q.text,
-      choices: [...q.choices]
-        .sort((a, b) => a.order - b.order)
-        .map((c) => ({ id: c.id, label: c.label, text: c.text })),
-    }));
+    // Shape the response and strip `isCorrect` so the answer key never reaches
+    // the client. Questions and choices are sorted in JS (an `orderBy` combined
+    // with `include` currently breaks type inference on the extended client).
+    const questions = [...rows]
+      .sort((a, b) => a.number - b.number)
+      .map((q) => ({
+        id: q.id,
+        number: q.number,
+        category: q.category,
+        text: q.text,
+        choices: [...q.choices]
+          .sort((a, b) => a.order - b.order)
+          .map((c) => ({ id: c.id, label: c.label, text: c.text })),
+      }));
 
-  return NextResponse.json({ questions });
+    return NextResponse.json({ questions });
+  } catch (err) {
+    console.error("GET /api/questions failed:", err);
+    return NextResponse.json(
+      {
+        error:
+          "โหลดข้อสอบไม่สำเร็จ — ตรวจสอบการเชื่อมต่อฐานข้อมูล (DATABASE_URL) บนเซิร์ฟเวอร์",
+      },
+      { status: 500 }
+    );
+  }
 }

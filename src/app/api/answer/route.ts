@@ -25,35 +25,43 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const question = await prisma.question.findUnique({
-    where: { id: questionId },
-    select: {
-      id: true,
-      choices: { select: { label: true, text: true, isCorrect: true } },
-    },
-  });
+  try {
+    const question = await prisma.question.findUnique({
+      where: { id: questionId },
+      select: {
+        id: true,
+        choices: { select: { label: true, text: true, isCorrect: true } },
+      },
+    });
 
-  if (!question) {
-    return NextResponse.json({ error: "Question not found" }, { status: 404 });
-  }
+    if (!question) {
+      return NextResponse.json({ error: "Question not found" }, { status: 404 });
+    }
 
-  const correctChoice = question.choices.find((c) => c.isCorrect);
-  if (!correctChoice) {
+    const correctChoice = question.choices.find((c) => c.isCorrect);
+    if (!correctChoice) {
+      return NextResponse.json(
+        { error: "Question has no correct answer configured" },
+        { status: 500 }
+      );
+    }
+
+    const isCorrect = chosenLabel === correctChoice.label;
+
+    await prisma.attempt.create({
+      data: { sessionId, questionId, chosenLabel, isCorrect },
+    });
+
+    return NextResponse.json({
+      isCorrect,
+      correctLabel: correctChoice.label,
+      correctText: correctChoice.text,
+    });
+  } catch (err) {
+    console.error("POST /api/answer failed:", err);
     return NextResponse.json(
-      { error: "Question has no correct answer configured" },
+      { error: "ตรวจคำตอบไม่สำเร็จ กรุณาลองใหม่" },
       { status: 500 }
     );
   }
-
-  const isCorrect = chosenLabel === correctChoice.label;
-
-  await prisma.attempt.create({
-    data: { sessionId, questionId, chosenLabel, isCorrect },
-  });
-
-  return NextResponse.json({
-    isCorrect,
-    correctLabel: correctChoice.label,
-    correctText: correctChoice.text,
-  });
 }
