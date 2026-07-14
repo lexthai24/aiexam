@@ -18,6 +18,8 @@ import { cddQuestions } from "./data/cdd";
 import { fundQuestions } from "./data/fund";
 import { villageQuestions } from "./data/village";
 import { infoQuestions } from "./data/info";
+import { povertyQuestions } from "./data/poverty";
+import { drugsQuestions } from "./data/drugs";
 
 // Order matters only for the display `number`; sampling randomizes anyway.
 const sources: SeedQuestion[][] = [
@@ -34,6 +36,8 @@ const sources: SeedQuestion[][] = [
   fundQuestions,
   villageQuestions,
   infoQuestions,
+  povertyQuestions,
+  drugsQuestions,
 ];
 
 // Flatten and assign sequential numbers (1..N) across the whole bank.
