@@ -1,7 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AnswerResult, QuestionDTO, QuizConfig, User } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  AnswerResult,
+  QuestionDTO,
+  QuizConfig,
+  SavedSession,
+  User,
+} from "@/lib/types";
 import { fetchJson } from "@/lib/fetchJson";
 import { ExplanationPanel } from "./ExplanationPanel";
 import { Timer } from "./Timer";
@@ -15,10 +21,14 @@ interface QState {
 export function Quiz({
   user,
   config,
+  resume,
   onExit,
 }: {
   user: User;
   config: QuizConfig;
+  // A saved session to restore (from /api/session). When present, the same seed
+  // rebuilds the identical questions and answers/progress/time are restored.
+  resume?: SavedSession | null;
   onExit: () => void;
 }) {
   const isExam = config.mode === "exam";
@@ -31,24 +41,77 @@ export function Quiz({
   const [submitting, setSubmitting] = useState(false);
   const [finished, setFinished] = useState(false);
   const [round, setRound] = useState(0);
+  // Live remaining seconds for timed exams, kept current via Timer.onTick so we
+  // can persist it on pause. Initialized from a resumed session if present.
+  const remainingRef = useRef<number | null>(resume?.remainingSec ?? null);
+  // The timer's starting value is fixed at mount (resumed remaining, or full
+  // limit) so ticking never restarts it.
+  const [timerStart] = useState(
+    resume?.remainingSec ?? (config.timeLimitMin ? config.timeLimitMin * 60 : 0)
+  );
+
+  // A fresh round uses a new seed; a resumed session reuses its saved seed so
+  // the exact same questions/choice-order are rebuilt.
+  const seed =
+    resume && round === 0
+      ? resume.seed
+      : `${user.userId}:${config.mode}:${round}`;
 
   // Load a randomized round from the mode-appropriate endpoint.
   useEffect(() => {
     setQuestions(null);
     setLoadError(null);
-    setCurrent(0);
-    setStates({});
-    setFinished(false);
 
-    const seed = `${user.userId}:${config.mode}:${round}`;
     const endpoint =
       config.mode === "review"
         ? `/api/mistakes?userId=${user.userId}&seed=${encodeURIComponent(seed)}`
         : `/api/questions?seed=${encodeURIComponent(seed)}`;
 
     fetchJson<{ questions: QuestionDTO[] }>(endpoint)
-      .then((json) => setQuestions(json.questions))
+      .then(async (json) => {
+        setQuestions(json.questions);
+        setFinished(false);
+        // Fresh round: clear everything.
+        if (!resume || round !== 0) {
+          setStates({});
+          setCurrent(0);
+          return;
+        }
+        // Resumed round: restore chosen answers. In practice/review the answer
+        // is revealed immediately, so re-grade answered questions to restore the
+        // reveal; in exam mode the choice alone is enough (graded at submit).
+        const entries = Object.entries(resume.answers);
+        if (config.mode === "exam") {
+          const restored: Record<number, QState> = {};
+          for (const [qid, choiceId] of entries)
+            restored[Number(qid)] = { chosenChoiceId: choiceId };
+          setStates(restored);
+        } else {
+          const graded = await Promise.all(
+            entries.map(async ([qid, choiceId]) => {
+              try {
+                const result = await fetchJson<AnswerResult>("/api/answer", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    questionId: Number(qid),
+                    choiceId,
+                    userId: user.userId,
+                    record: false, // already recorded when first answered
+                  }),
+                });
+                return [Number(qid), { chosenChoiceId: choiceId, result }] as const;
+              } catch {
+                return [Number(qid), { chosenChoiceId: choiceId }] as const;
+              }
+            })
+          );
+          setStates(Object.fromEntries(graded));
+        }
+        setCurrent(Math.min(resume.current, json.questions.length - 1));
+      })
       .catch((err) => setLoadError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.userId, config.mode, round]);
 
   const answeredCount = useMemo(
@@ -61,7 +124,53 @@ export function Quiz({
     [states]
   );
 
-  const finish = useCallback(() => setFinished(true), []);
+  // Persist the current session (pause) or clear it (on finish). Writes to the
+  // DB and mirrors to localStorage so resume works fast and across devices.
+  const persistSession = useCallback(
+    async (opts: { finished: boolean }) => {
+      const answers: Record<string, number> = {};
+      for (const [qid, s] of Object.entries(states)) {
+        if (s.chosenChoiceId !== undefined) answers[qid] = s.chosenChoiceId;
+      }
+      const payload = {
+        userId: user.userId,
+        mode: config.mode,
+        timeLimitMin: config.timeLimitMin ?? null,
+        seed,
+        questionIds: questions?.map((q) => q.id) ?? [],
+        answers,
+        current,
+        remainingSec: timed ? remainingRef.current : null,
+        finished: opts.finished,
+      };
+      try {
+        localStorage.setItem(`aiexam_session_${user.userId}`, JSON.stringify(payload));
+        if (opts.finished) localStorage.removeItem(`aiexam_session_${user.userId}`);
+      } catch {
+        /* ignore storage errors */
+      }
+      try {
+        await fetchJson("/api/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        /* best effort */
+      }
+    },
+    [states, current, questions, seed, timed, user.userId, config]
+  );
+
+  const finish = useCallback(() => {
+    void persistSession({ finished: true });
+    setFinished(true);
+  }, [persistSession]);
+
+  async function pauseAndExit() {
+    await persistSession({ finished: false });
+    onExit();
+  }
 
   if (loadError) {
     return (
@@ -181,6 +290,7 @@ export function Quiz({
         for (const [qid, s] of graded) next[Number(qid)] = s;
         return next;
       });
+      await persistSession({ finished: true });
       setFinished(true);
     } catch {
       // allow retry
@@ -199,8 +309,11 @@ export function Quiz({
       right={
         timed ? (
           <Timer
-            totalSeconds={config.timeLimitMin! * 60}
+            totalSeconds={timerStart}
             onExpire={submitExam}
+            onTick={(r) => {
+              remainingRef.current = r;
+            }}
           />
         ) : undefined
       }
@@ -346,17 +459,34 @@ export function Quiz({
           )}
         </div>
 
-        {isExam && (
-          <div className="mt-4 text-center">
+        {/* Secondary actions: pause anytime; finish-and-score anytime */}
+        <div className="mt-4 flex flex-col items-center gap-2 text-sm">
+          {isExam && (
             <button
               onClick={submitExam}
               disabled={!canFinish || submitting}
-              className="text-sm font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-40"
+              className="font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-40"
             >
               ส่งคำตอบและดูผลตอนนี้ ({answeredCount}/{questions.length})
             </button>
-          </div>
-        )}
+          )}
+          {!isExam && (
+            <button
+              onClick={finish}
+              disabled={answeredCount === 0}
+              className="font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-40"
+            >
+              หยุดและดูคะแนน ({answeredCount}/{questions.length})
+            </button>
+          )}
+          <button
+            onClick={pauseAndExit}
+            disabled={submitting}
+            className="text-[var(--muted)] transition-colors hover:text-[var(--foreground)] disabled:opacity-40"
+          >
+            ⏸ หยุดพักไว้ก่อน (ทำต่อภายหลังได้)
+          </button>
+        </div>
       </div>
     </Screen>
   );

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { QuizConfig, User } from "@/lib/types";
+import { useCallback, useEffect, useState } from "react";
+import type { QuizConfig, SavedSession, User } from "@/lib/types";
+import { fetchJson } from "@/lib/fetchJson";
 import { Login } from "@/components/Login";
 import { ModeSelect } from "@/components/ModeSelect";
 import { Quiz } from "@/components/Quiz";
@@ -11,6 +12,7 @@ const USER_KEY = "aiexam_user";
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [config, setConfig] = useState<QuizConfig | null>(null);
+  const [resume, setResume] = useState<SavedSession | null>(null);
   const [ready, setReady] = useState(false);
 
   // Restore a saved login so returning users skip the name+PIN screen.
@@ -24,6 +26,20 @@ export default function Home() {
     setReady(true);
   }, []);
 
+  // When a user is known and we're on the mode-select screen, look for an
+  // in-progress session to offer resuming.
+  const refreshSession = useCallback((u: User) => {
+    fetchJson<{ session: SavedSession | null }>(
+      `/api/session?userId=${u.userId}`
+    )
+      .then((r) => setResume(r.session))
+      .catch(() => setResume(null));
+  }, []);
+
+  useEffect(() => {
+    if (user && !config) refreshSession(user);
+  }, [user, config, refreshSession]);
+
   function handleLogin(u: User) {
     setUser(u);
     try {
@@ -36,6 +52,7 @@ export default function Home() {
   function handleLogout() {
     setUser(null);
     setConfig(null);
+    setResume(null);
     try {
       localStorage.removeItem(USER_KEY);
     } catch {
@@ -43,15 +60,46 @@ export default function Home() {
     }
   }
 
+  // Resume the saved session: derive its config and enter the quiz.
+  function handleResume() {
+    if (!resume) return;
+    setConfig({
+      mode: resume.mode,
+      timeLimitMin: resume.timeLimitMin ?? undefined,
+    });
+  }
+
+  const inQuiz = Boolean(config);
+  // Pass the resume session to Quiz only when the chosen config matches it.
+  const resumeForQuiz =
+    resume && config && resume.mode === config.mode ? resume : null;
+
   return (
     <main className="flex flex-1 flex-col">
       <Header />
       {!ready ? null : !user ? (
         <Login onLogin={handleLogin} />
-      ) : !config ? (
-        <ModeSelect user={user} onStart={setConfig} onLogout={handleLogout} />
+      ) : !inQuiz ? (
+        <ModeSelect
+          user={user}
+          resume={resume}
+          onResume={handleResume}
+          onStart={(c) => {
+            setResume(null); // starting fresh discards any paused session
+            setConfig(c);
+          }}
+          onLogout={handleLogout}
+        />
       ) : (
-        <Quiz user={user} config={config} onExit={() => setConfig(null)} />
+        <Quiz
+          user={user}
+          config={config!}
+          resume={resumeForQuiz}
+          onExit={() => {
+            setConfig(null);
+            refreshSession(user);
+          }}
+        />
       )}
     </main>
   );

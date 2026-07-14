@@ -7,14 +7,21 @@ import { prisma } from "@/lib/prisma";
 // round), records the attempt, and returns whether it was correct plus the
 // correct choice's id so the UI can highlight it.
 export async function POST(req: NextRequest) {
-  let body: { questionId?: number; choiceId?: number; userId?: number };
+  let body: {
+    questionId?: number;
+    choiceId?: number;
+    userId?: number;
+    record?: boolean;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { questionId, choiceId, userId } = body;
+  // record defaults to true; pass record:false to grade WITHOUT logging an
+  // attempt (used when re-grading a resumed session to avoid double-counting).
+  const { questionId, choiceId, userId, record = true } = body;
   if (
     typeof questionId !== "number" ||
     typeof choiceId !== "number" ||
@@ -53,10 +60,12 @@ export async function POST(req: NextRequest) {
 
     const isCorrect = chosenChoice.id === correctChoice.id;
 
-    await prisma.attempt.create({
-      // Store the choice's canonical label for the record (not the shuffled one).
-      data: { userId, questionId, chosenLabel: chosenChoice.label, isCorrect },
-    });
+    if (record) {
+      await prisma.attempt.create({
+        // Store the choice's canonical label (not the shuffled display label).
+        data: { userId, questionId, chosenLabel: chosenChoice.label, isCorrect },
+      });
+    }
 
     return NextResponse.json({
       isCorrect,

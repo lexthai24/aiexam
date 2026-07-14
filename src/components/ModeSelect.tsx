@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { QuizConfig, QuizMode, User } from "@/lib/types";
+import type { QuizConfig, QuizMode, SavedSession, User } from "@/lib/types";
 
 // Time options for exam mode (minutes). null = untimed.
 const TIME_OPTIONS: { label: string; value: number | null }[] = [
@@ -42,10 +42,14 @@ const MODES: ModeCard[] = [
 
 export function ModeSelect({
   user,
+  resume,
+  onResume,
   onStart,
   onLogout,
 }: {
   user: User;
+  resume?: SavedSession | null;
+  onResume: () => void;
   onStart: (config: QuizConfig) => void;
   onLogout: () => void;
 }) {
@@ -58,6 +62,9 @@ export function ModeSelect({
     }
     onStart({ mode });
   }
+
+  const resumeMode = resume ? MODES.find((m) => m.mode === resume.mode) : null;
+  const resumeAnswered = resume ? Object.keys(resume.answers).length : 0;
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
@@ -74,9 +81,29 @@ export function ModeSelect({
         </button>
       </div>
 
+      {/* Resume banner for an in-progress session */}
+      {resume && resumeMode && (
+        <div className="mb-5 rounded-2xl border border-[var(--primary)] bg-indigo-50/60 p-4 dark:bg-indigo-500/10 animate-reveal">
+          <p className="font-semibold text-[var(--primary)]">
+            {resumeMode.emoji} มีการสอบค้างอยู่ — {resumeMode.title}
+          </p>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            ทำไปแล้ว {resumeAnswered} ข้อ
+            {resume.timeLimitMin ? ` · จับเวลา ${resume.timeLimitMin} นาที` : ""}
+          </p>
+          <button
+            onClick={onResume}
+            className="mt-3 w-full rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            ▶ ทำต่อจากที่ค้างไว้
+          </button>
+        </div>
+      )}
+
       <h2 className="mb-1 text-xl font-bold sm:text-2xl">เลือกโหมดการฝึก</h2>
       <p className="mb-5 text-sm text-[var(--muted)]">
         แต่ละรอบจะสุ่มข้อสอบ 100 ข้อ ลำดับไม่เหมือนกัน
+        {resume ? " (การเริ่มใหม่จะยกเลิกการสอบที่ค้างไว้)" : ""}
       </p>
 
       <div className="flex flex-col gap-3">

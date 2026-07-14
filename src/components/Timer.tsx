@@ -7,9 +7,13 @@ import { useEffect, useRef, useState } from "react";
 export function Timer({
   totalSeconds,
   onExpire,
+  onTick,
 }: {
   totalSeconds: number;
   onExpire: () => void;
+  // Reports the current remaining seconds each tick, so the parent can persist
+  // it when the user pauses (time is frozen while paused, resumed from here).
+  onTick?: (remaining: number) => void;
 }) {
   const [remaining, setRemaining] = useState(totalSeconds);
   const expiredRef = useRef(false);
@@ -21,6 +25,7 @@ export function Timer({
       const elapsed = Math.floor((Date.now() - started) / 1000);
       const left = Math.max(0, totalSeconds - elapsed);
       setRemaining(left);
+      onTick?.(left);
       if (left <= 0 && !expiredRef.current) {
         expiredRef.current = true;
         clearInterval(id);
@@ -28,7 +33,7 @@ export function Timer({
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [totalSeconds, onExpire]);
+  }, [totalSeconds, onExpire, onTick]);
 
   const mm = Math.floor(remaining / 60);
   const ss = remaining % 60;

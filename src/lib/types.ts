@@ -39,3 +39,16 @@ export interface QuizConfig {
   // Time limit in minutes for exam mode. undefined = untimed.
   timeLimitMin?: number;
 }
+
+// A saved, resumable quiz session (mirrors the QuizSession DB model).
+export interface SavedSession {
+  id: number;
+  mode: QuizMode;
+  timeLimitMin: number | null;
+  seed: string;
+  questionIds: number[];
+  answers: Record<string, number>; // questionId -> chosenChoiceId
+  current: number;
+  remainingSec: number | null;
+  finished: boolean;
+}
