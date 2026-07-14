@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashSeed, seededShuffle } from "@/lib/shuffle";
+import { shapeQuestionForClient } from "@/lib/shapeQuestion";
 
 const ROUND_SIZE = 100;
 
@@ -47,15 +48,7 @@ export async function GET(req: NextRequest) {
     const seed = hashSeed(`mistakes:${seedParam}`);
     const selected = seededShuffle(rows, seed).slice(0, ROUND_SIZE);
 
-    const questions = selected.map((q) => ({
-      id: q.id,
-      number: q.number,
-      category: q.category,
-      text: q.text,
-      choices: [...q.choices]
-        .sort((a, b) => a.order - b.order)
-        .map((c) => ({ id: c.id, label: c.label, text: c.text })),
-    }));
+    const questions = selected.map((q) => shapeQuestionForClient(q, seed));
 
     return NextResponse.json({ questions, total: wrongIds.length });
   } catch (err) {

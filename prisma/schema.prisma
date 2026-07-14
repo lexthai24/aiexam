@@ -71,6 +71,32 @@ model User {
   // A given display name may be reused by different people, distinguished by PIN.
   @@unique([name, pinHash])
   @@index([name])
+
+  quizSessions QuizSession[]
+}
+
+/// A saved, resumable quiz session. Persists an in-progress round so a user can
+/// pause and continue later (from any device), or come back and finish for a
+/// score. There is at most one active (unfinished) session per user.
+model QuizSession {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  mode         String // practice | exam | review
+  timeLimitMin Int? // exam mode only; null = untimed
+  seed         String // the round seed (so the same questions can be rebuilt)
+  questionIds  Int[] // ordered question ids in this round
+  answers      Json // { [questionId]: chosenLabel }
+  current      Int      @default(0) // index of the current question
+  // For timed exams: remaining seconds captured at the moment of pausing, so
+  // time is frozen while paused and resumes from here.
+  remainingSec Int?
+  finished     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 /// A record of a user answering a question. Linked to a User so progress and

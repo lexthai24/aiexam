@@ -8,7 +8,7 @@ import { Timer } from "./Timer";
 
 // Per-question state kept in memory for the whole round.
 interface QState {
-  chosenLabel?: string;
+  chosenChoiceId?: number;
   result?: AnswerResult;
 }
 
@@ -52,7 +52,8 @@ export function Quiz({
   }, [user.userId, config.mode, round]);
 
   const answeredCount = useMemo(
-    () => Object.values(states).filter((s) => s.chosenLabel).length,
+    () =>
+      Object.values(states).filter((s) => s.chosenChoiceId !== undefined).length,
     [states]
   );
   const correctCount = useMemo(
@@ -128,15 +129,15 @@ export function Quiz({
 
   const q = questions[current];
   const state = states[q.id] ?? {};
-  const chosen = Boolean(state.chosenLabel);
+  const chosen = state.chosenChoiceId !== undefined;
   // In exam mode we defer the reveal until the whole exam is submitted.
   const revealed = chosen && !isExam;
 
-  async function choose(label: string) {
+  async function choose(choiceId: number) {
     if (chosen || submitting) return;
     if (isExam) {
       // Record the choice locally; grade later on submit.
-      setStates((prev) => ({ ...prev, [q.id]: { chosenLabel: label } }));
+      setStates((prev) => ({ ...prev, [q.id]: { chosenChoiceId: choiceId } }));
       return;
     }
     setSubmitting(true);
@@ -144,9 +145,9 @@ export function Quiz({
       const result = await fetchJson<AnswerResult>("/api/answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId: q.id, chosenLabel: label, userId: user.userId }),
+        body: JSON.stringify({ questionId: q.id, choiceId, userId: user.userId }),
       });
-      setStates((prev) => ({ ...prev, [q.id]: { chosenLabel: label, result } }));
+      setStates((prev) => ({ ...prev, [q.id]: { chosenChoiceId: choiceId, result } }));
     } catch {
       // allow retry
     } finally {
@@ -158,7 +159,9 @@ export function Quiz({
   async function submitExam() {
     setSubmitting(true);
     try {
-      const entries = Object.entries(states).filter(([, s]) => s.chosenLabel);
+      const entries = Object.entries(states).filter(
+        ([, s]) => s.chosenChoiceId !== undefined
+      );
       const graded = await Promise.all(
         entries.map(async ([qid, s]) => {
           const result = await fetchJson<AnswerResult>("/api/answer", {
@@ -166,7 +169,7 @@ export function Quiz({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               questionId: Number(qid),
-              chosenLabel: s.chosenLabel,
+              choiceId: s.chosenChoiceId,
               userId: user.userId,
             }),
           });
@@ -239,9 +242,9 @@ export function Quiz({
 
           <div className="mt-5 flex flex-col gap-2.5">
             {q.choices.map((choice) => {
-              const isChosen = state.chosenLabel === choice.label;
+              const isChosen = state.chosenChoiceId === choice.id;
               const isCorrectChoice =
-                revealed && state.result?.correctLabel === choice.label;
+                revealed && state.result?.correctChoiceId === choice.id;
               const isWrongChosen =
                 revealed && isChosen && !state.result?.isCorrect;
 
@@ -261,7 +264,7 @@ export function Quiz({
               return (
                 <button
                   key={choice.id}
-                  onClick={() => choose(choice.label)}
+                  onClick={() => choose(choice.id)}
                   disabled={revealed || submitting}
                   className={`flex items-start gap-3 rounded-2xl border p-3.5 text-left transition-colors sm:p-4 ${cls} ${
                     revealed ? "cursor-default" : "cursor-pointer"
@@ -302,7 +305,8 @@ export function Quiz({
               ) : (
                 <>
                   <XIcon /> ยังไม่ถูก — คำตอบที่ถูกคือข้อ{" "}
-                  {state.result?.correctLabel}
+                  {q.choices.find((c) => c.id === state.result?.correctChoiceId)
+                    ?.label}
                 </>
               )}
             </div>
@@ -444,9 +448,9 @@ function ResultsView({
           </h2>
           <div className="mt-4 flex flex-col gap-2">
             {q.choices.map((c) => {
-              const isCorrect = s.result?.correctLabel === c.label;
+              const isCorrect = s.result?.correctChoiceId === c.id;
               const isChosenWrong =
-                s.chosenLabel === c.label && !s.result?.isCorrect;
+                s.chosenChoiceId === c.id && !s.result?.isCorrect;
               let cls = "border-[var(--border)] opacity-70";
               if (isCorrect)
                 cls =

@@ -2,25 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // POST /api/answer
-// Body: { questionId: number, chosenLabel: string, userId: number }
-// Grades the answer server-side, records the attempt for the user, and returns
-// whether it was correct along with the correct label/text for UI feedback.
+// Body: { questionId: number, choiceId: number, userId: number }
+// Grades by the stable choice `id` (not the display label, which is shuffled per
+// round), records the attempt, and returns whether it was correct plus the
+// correct choice's id so the UI can highlight it.
 export async function POST(req: NextRequest) {
-  let body: { questionId?: number; chosenLabel?: string; userId?: number };
+  let body: { questionId?: number; choiceId?: number; userId?: number };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { questionId, chosenLabel, userId } = body;
+  const { questionId, choiceId, userId } = body;
   if (
     typeof questionId !== "number" ||
-    typeof chosenLabel !== "string" ||
+    typeof choiceId !== "number" ||
     typeof userId !== "number"
   ) {
     return NextResponse.json(
-      { error: "questionId, chosenLabel and userId are required" },
+      { error: "questionId, choiceId and userId are required" },
       { status: 400 }
     );
   }
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
       where: { id: questionId },
       select: {
         id: true,
-        choices: { select: { label: true, text: true, isCorrect: true } },
+        choices: { select: { id: true, label: true, text: true, isCorrect: true } },
       },
     });
 
@@ -39,22 +40,27 @@ export async function POST(req: NextRequest) {
     }
 
     const correctChoice = question.choices.find((c) => c.isCorrect);
+    const chosenChoice = question.choices.find((c) => c.id === choiceId);
     if (!correctChoice) {
       return NextResponse.json(
         { error: "Question has no correct answer configured" },
         { status: 500 }
       );
     }
+    if (!chosenChoice) {
+      return NextResponse.json({ error: "Invalid choice" }, { status: 400 });
+    }
 
-    const isCorrect = chosenLabel === correctChoice.label;
+    const isCorrect = chosenChoice.id === correctChoice.id;
 
     await prisma.attempt.create({
-      data: { userId, questionId, chosenLabel, isCorrect },
+      // Store the choice's canonical label for the record (not the shuffled one).
+      data: { userId, questionId, chosenLabel: chosenChoice.label, isCorrect },
     });
 
     return NextResponse.json({
       isCorrect,
-      correctLabel: correctChoice.label,
+      correctChoiceId: correctChoice.id,
       correctText: correctChoice.text,
     });
   } catch (err) {

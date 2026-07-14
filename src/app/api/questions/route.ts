@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashSeed, seededShuffle } from "@/lib/shuffle";
 import { allocateByBlueprint } from "@/lib/blueprint";
+import { shapeQuestionForClient } from "@/lib/shapeQuestion";
 
 // How many questions make up one exam round, no matter how many exist in total.
 const ROUND_SIZE = 100;
@@ -47,15 +48,9 @@ export async function GET(req: NextRequest) {
     // Shuffle the combined selection so categories are interleaved, not grouped.
     const selected = seededShuffle(picked, seed);
 
-    const questions = selected.map((q) => ({
-      id: q.id,
-      number: q.number,
-      category: q.category,
-      text: q.text,
-      choices: [...q.choices]
-        .sort((a, b) => a.order - b.order)
-        .map((c) => ({ id: c.id, label: c.label, text: c.text })),
-    }));
+    // Shape each question: choices are shuffled and re-labelled ก/ข/ค/ง by
+    // position, so the correct answer isn't stuck in the same slot every time.
+    const questions = selected.map((q) => shapeQuestionForClient(q, seed));
 
     return NextResponse.json({ questions, total: rows.length });
   } catch (err) {

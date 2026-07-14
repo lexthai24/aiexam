@@ -14,7 +14,7 @@ export interface QuestionDTO {
 
 export interface AnswerResult {
   isCorrect: boolean;
-  correctLabel: string;
+  correctChoiceId: number;
   correctText: string;
 }
 
