@@ -57,19 +57,35 @@ model Explanation {
   question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 }
 
-/// A record of a user answering a question. Kept lightweight and anonymous
-/// (identified by a client-generated session id) so we can show progress and
-/// review without requiring accounts.
+/// A lightweight user identified by a display name + 4-digit PIN. This is not
+/// full authentication (no email, no password) — it exists so that data
+/// separates per person and follows them across devices/shared computers, which
+/// an anonymous per-browser id cannot do. The PIN is stored only as a hash.
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String
+  pinHash   String
+  createdAt DateTime  @default(now())
+  attempts  Attempt[]
+
+  // A given display name may be reused by different people, distinguished by PIN.
+  @@unique([name, pinHash])
+  @@index([name])
+}
+
+/// A record of a user answering a question. Linked to a User so progress and
+/// mistake-review are per person.
 model Attempt {
   id          Int      @id @default(autoincrement())
-  sessionId   String
+  userId      Int
   questionId  Int
   chosenLabel String
   isCorrect   Boolean
   createdAt   DateTime @default(now())
 
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
+  @@index([userId])
   @@index([questionId])
 }

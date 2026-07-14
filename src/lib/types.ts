@@ -23,3 +23,19 @@ export interface ExplanationResult {
   model: string;
   cached: boolean;
 }
+
+export interface User {
+  userId: number;
+  name: string;
+}
+
+// practice: instant reveal + AI explanation, untimed
+// exam:     answer straight through, no reveal until finished, optional timer
+// review:   only previously-wrong questions, instant reveal (like practice)
+export type QuizMode = "practice" | "exam" | "review";
+
+export interface QuizConfig {
+  mode: QuizMode;
+  // Time limit in minutes for exam mode. undefined = untimed.
+  timeLimitMin?: number;
+}
