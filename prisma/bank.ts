@@ -11,6 +11,8 @@ import { pdpaQuestions } from "./data/pdpa";
 import { processQuestions } from "./data/process";
 import { generalQuestions } from "./data/general";
 import { strategyQuestions } from "./data/strategy";
+import { otopQuestions } from "./data/otop";
+import { economyQuestions } from "./data/economy";
 
 // Order matters only for the display `number`; sampling randomizes anyway.
 const sources: SeedQuestion[][] = [
@@ -20,6 +22,8 @@ const sources: SeedQuestion[][] = [
   processQuestions,
   generalQuestions,
   strategyQuestions,
+  otopQuestions,
+  economyQuestions,
 ];
 
 // Flatten and assign sequential numbers (1..N) across the whole bank.
