@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f7fb;
+  --surface: #ffffff;
+  --foreground: #1a1a2e;
+  --muted: #6b7280;
+  --border: #e6e6ef;
+  --primary: #4f46e5; /* indigo */
+  --primary-hover: #4338ca;
+  --correct: #16a34a;
+  --correct-bg: #ecfdf3;
+  --wrong: #dc2626;
+  --wrong-bg: #fef2f2;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --font-sans: var(--font-sans-thai);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f0f17;
+    --surface: #191924;
+    --foreground: #e8e8f0;
+    --muted: #9ca3af;
+    --border: #2a2a3a;
+    --primary: #818cf8;
+    --primary-hover: #a5b4fc;
+    --correct: #4ade80;
+    --correct-bg: #0f2a1c;
+    --wrong: #f87171;
+    --wrong-bg: #2a1414;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans-thai), system-ui, sans-serif;
+}
+
+/* Smooth reveal animation for feedback / explanation panels. */
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-reveal {
+  animation: fade-slide-in 0.25s ease-out both;
+}

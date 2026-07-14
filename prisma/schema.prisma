@@ -1,0 +1,75 @@
+// Prisma schema for the AI-powered online exam system.
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A single exam question. `key` is a stable, human-readable identifier
+/// (e.g. "q1") used by the seed script to stay idempotent.
+model Question {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  number    Int // display order within the exam
+  category  String // หมวด / section name
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  choices     Choice[]
+  explanation Explanation?
+  attempts    Attempt[]
+
+  @@index([number])
+  @@index([category])
+}
+
+/// One answer option belonging to a question.
+model Choice {
+  id         Int     @id @default(autoincrement())
+  questionId Int
+  label      String // ก / ข / ค / ง
+  text       String  @db.Text
+  isCorrect  Boolean @default(false)
+  order      Int
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, label])
+  @@index([questionId])
+}
+
+/// Cached AI explanation for a question. Because the correct answer for a
+/// question never changes, we cache exactly one explanation per question so
+/// repeated views never spend Deepseek quota again.
+model Explanation {
+  id         Int      @id @default(autoincrement())
+  questionId Int      @unique
+  content    String   @db.Text
+  model      String // which model produced it (e.g. deepseek-chat)
+  createdAt  DateTime @default(now())
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+/// A record of a user answering a question. Kept lightweight and anonymous
+/// (identified by a client-generated session id) so we can show progress and
+/// review without requiring accounts.
+model Attempt {
+  id          Int      @id @default(autoincrement())
+  sessionId   String
+  questionId  Int
+  chosenLabel String
+  isCorrect   Boolean
+  createdAt   DateTime @default(now())
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([questionId])
+}
