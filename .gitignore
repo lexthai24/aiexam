@@ -43,4 +43,6 @@ next-env.d.ts
 
 /src/generated/prisma
 scheduled_tasks.lock
-.claude/scheduled_tasks.lock
+
+# local AI/IDE tooling
+.claude/
