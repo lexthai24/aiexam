@@ -46,3 +46,10 @@ scheduled_tasks.lock
 
 # local AI/IDE tooling
 .claude/
+
+# question bank content (lives in the DB; kept out of the repo).
+# The seed pipeline (seed.ts / bank.ts / validate.ts) and shared.ts stay tracked
+# so seeding still works locally from these ignored files.
+/prisma/questions.ts
+/prisma/data/*.ts
+!/prisma/data/shared.ts
