@@ -28,17 +28,51 @@ async function main() {
   });
   const prisma = new PrismaClient({ adapter });
 
-  const questions = await prisma.question.findMany({
-    include: { choices: true },
-  });
-  questions.sort((a, b) => a.number - b.number);
+  // Small retry helper — the direct connection can drop on large/long queries.
+  async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+    let lastErr: unknown;
+    for (let i = 0; i < 5; i++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        console.warn(`retry ${label} (${i + 1}/5): ${(err as Error).message}`);
+        await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+    throw lastErr;
+  }
+
+  // Load questions+choices in PAGES to avoid one huge query dropping the
+  // connection. Each page is retried independently.
+  const total = await withRetry(() => prisma.question.count(), "count");
+  const PAGE = 100;
+  const questions: Awaited<
+    ReturnType<typeof prisma.question.findMany<{ include: { choices: true } }>>
+  > = [];
+  for (let skip = 0; skip < total; skip += PAGE) {
+    const page = await withRetry(
+      () =>
+        prisma.question.findMany({
+          include: { choices: true },
+          orderBy: { number: "asc" },
+          skip,
+          take: PAGE,
+        }),
+      `page@${skip}`
+    );
+    questions.push(...page);
+  }
 
   // Which questions still need an explanation?
   const existing = new Set(
     force
       ? []
       : (
-          await prisma.explanation.findMany({ select: { questionId: true } })
+          await withRetry(
+            () => prisma.explanation.findMany({ select: { questionId: true } }),
+            "existing"
+          )
         ).map((e) => e.questionId)
   );
 
